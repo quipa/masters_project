@@ -84,8 +84,10 @@ end
 ;; Setup procedures
 ;;;;
 
+import-data
+
 to setup-classes
-  let n 7 ; TODO detect automatically
+  let n 44 ; TODO detect automatically
   set classes range n
   set burnt-area-class 6
   set class-pcolor [red yellow brown 68 lime green black]
