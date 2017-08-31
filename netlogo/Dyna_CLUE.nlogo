@@ -1,46 +1,69 @@
-;;
-;; Needed inputs
-;; categories and colors
-;; suitability raster
+extensions [csv table]
+
+;; TODO Needed patch import procedures
+;; optimize some calculations using matrices extension
+;; here probabilities in the allocation procedure are not actually probabilities
+;; as they can hold values larger then 1 and negative values.
 
 globals [
+  ; land use class permanent globals
+
+  ;; class info globals
   classes ; numerical code of land use classes
   class-pcolor ; pcolor for each class
+  class-code
   class-labels
-  class-demand ; demand for each class
-  class-demand-perc
-  class-comp-adv ; comparative advantage for each class
-  class-elasticity ;
+
+  ;; class parameter globals
+  class-type; class type (human or natural)
+  class-presence ; indicate if class is present in data; Should I use this????
+  class-elasticity ; how difficult it is to convert class
   class-conversion ; matrix of allowed conversions
-  class-type;
+  class-conversion-allowed
+  class-succession ; list with succession class and sucession age
+  class-demand-reporters ; reporters that calculate demand
+
+  ; class temporary globals
+
+
+  ;; class area total globals
   class-total ; area total for each class
   class-total-initial ; intial area totals for each class
 
-  class-succession
+  ;; class allocation globals
+  class-demand ; demand for each class
+  class-comp-adv ; comparative advantage for each class
+  class-total-iter
+  iter
 
-  ; fire related globals
+  ; fire globals
   burnt-area-class
   class-fire-pron
   fire-front
 
-  ;; class allocation iteration globals
-  class-total-iter
-  class-comp-adv-step
-  iter
-
   world-size
+  study-area
 ]
 
 patches-own [
   class ;
-  class-initial
-  class-iter
   class-suit ; patch suitability for each class
-  class-prob ; total probability for each class
+
+  class-label
+  class-initial
+  class-future
   class-optimal ; optimal class for patch
+
   patch-elasticity ; patch elasticity
   patch-conversion
+
+  class-prob ; total probability for each class
+  class-allowed ; classes which the patch is allowed to convert to
+  class-iter
+
+  fires
   patch-fire-pron
+
   age
 ]
 
@@ -50,106 +73,72 @@ patches-own [
 
 
 to setup
-  random-seed 123
   clear-all
-  set world-size world-width * world-height
-  setup-classes
+  random-seed 666
+  setup-perm-globals
   setup-patches
+  setup-temp-globals
   reset-ticks
 end
 
 to go
-  if class-allocation-switch [
-    class-allocation
-    class-allocation-cleanup
-  ]
 
-  if succession-switch [
-    succession
-  ]
-  if fire-switch [
-    repeat ignitions [fire-ignite]
-  ]
-  ask patches [
+  if class-allocation-switch [class-allocation]
+  if succession-switch [succession]
+
+  if fire-choice = "random fire" [repeat ignitions [fire-ignite]]
+  if fire-choice = "input fire data" [fire-deterministic]
+
+  ask study-area [
     set-patch-keywords
 ;    if class-initial != class [
 ;      set pcolor white
 ;    ]
   ]
   set class-total calculate-class-total
+
   tick
 end
 
 ;;;;;;;;
-;; Setup procedures
+;; Setup and Import procedures
 ;;;;
 
-import-data
+to reset
+  clear-all-plots
+  ask study-area [
+    set class class-initial
+    set class-iter class
+    set-patch-keywords
+  ]
+  setup-temp-globals
+  reset-ticks
+end
 
-to setup-classes
-  let n 44 ; TODO detect automatically
-  set classes range n
-  set burnt-area-class 6
-  set class-pcolor [red yellow brown 68 lime green black]
-  set class-labels ["urban" "temp-crops" "perm-crops" "grassland" "shrubland" "forest" "burnt-area"]
-  set class-comp-adv n-values n [0.0]
-  set class-elasticity [1.0 0.1 0.5 0.1 0.3 0.4 0.1]
-  set class-conversion [
-    [1 1 1 1 0 0 0]
-    [1 1 1 1 0 0 0]
-    [1 1 1 1 0 0 0]
-    [1 1 1 1 0 0 0]
-    [1 1 1 0 1 0 0]
-    [1 1 1 0 0 1 0]
-    [1 1 1 0 0 0 1]
-  ]
-  ; first item is the succession class and the second item is the age for sucession; -1 means no succession occurs
-  set class-type [1 1 1 0 0 0 0] ; 1 indicates class is human 0 it is natural
-  set class-succession [
-    [-1 -1]
-    [-1 -1]
-    [-1 -1]
-    [ 4  3]
-    [ 5  10]
-    [-1 -1]
-    [ 3  1]
-  ]
-  set class-fire-pron [0 0.01 0.01 0.00 0.20 0.50 0.35]
+to setup-perm-globals
+  set world-size input-world-width * input-world-height
+  set-patch-size 0.4
+  resize-world 0 input-world-width (1 - input-world-height) 0
+  import-globals
+  set class-conversion-allowed map [c -> filter [cv -> item cv c = 1] classes ] class-conversion
+  set burnt-area-class 5 ; TODO make widget for this selection or import from file
+end
+
+to setup-temp-globals
   set class-total calculate-class-total
   set class-total-initial class-total
-  set class-total-iter class-total
-  set class-demand-perc [0.1 0.2 0.2 0.0 0.0 0.0 0.0]
-  set class-demand map [c -> round (c * world-size)] class-demand-perc
 end
 
 to setup-patches
-  ask patches [
-    randomize-class-suit
-    set age 0
-    set-class-optimal
-    set class random (length classes - 1)
-;    ask n-of (round world-size * 0.5) patches [
-;      set class random 2 + 4 ; set random natural class
-;    ]
-;    test-quadrant-class
-    set class-iter class
-    set class-initial class
-    set-patch-keywords
-  ]
-end
+  import-patch
+  ;randomize-class-data
+  set study-area patches with [class != 0]
 
-to test-quadrant-class
-  ask patches with [pxcor < world-width / 2 and pycor < world-height / 2 ] [
-    set class 3
-  ]
-  ask patches with [pxcor > world-width / 2 and pycor < world-height / 2 ] [
-    set class 4
-  ]
-  ask patches with [pxcor < world-width / 2 and pycor > world-height / 2 ] [
-    set class 5
-  ]
-  ask patches with [pxcor > world-width / 2 and pycor > world-height / 2 ] [
-    set class 6
+  ask study-area [
+    set class-initial class
+    set-class-optimal
+    set age 0
+    set-patch-keywords
   ]
 end
 
@@ -158,6 +147,7 @@ to set-patch-keywords
   set patch-elasticity item class class-elasticity
   set patch-conversion item class class-conversion
   set patch-fire-pron item class class-fire-pron
+  set class-label item class class-labels
   style-patch
 end
 
@@ -167,11 +157,157 @@ to set-class-optimal
   set class-optimal position optimal-class-suit class-suit
 end
 
+to import-globals
+  file-close
+  file-open "sabor_classes_short.csv"
+  ;file-open "test_classes.csv"
+
+  set classes []
+  set class-pcolor []
+  set class-code []
+  set class-labels []
+  set class-elasticity []
+  set class-conversion []
+  set class-succession []
+  set class-fire-pron []
+  set class-type []
+  set class-demand-reporters []
+  ;set class-demand []
+
+  let header-index ""
+  let i 0
+
+  while [not file-at-end?] [
+    let row csv:from-row file-read-line
+
+    ifelse i = 0 [
+      set header-index headers-index-table row
+    ] [
+      ; Can't figure out a way to not repeat code here
+      set classes lput (cell-value row "classes" header-index) classes
+      set class-pcolor lput read-from-string (cell-value row "class-pcolor" header-index) class-pcolor
+      set class-code lput (cell-value row "class-code" header-index) class-code
+      set class-labels lput (cell-value row "class-labels" header-index) class-labels
+      set class-elasticity lput (cell-value row "class-elasticity" header-index) class-elasticity
+      set class-conversion lput read-from-string (cell-value row "class-conversion" header-index) class-conversion
+      set class-succession lput read-from-string (cell-value row "class-succession" header-index) class-succession
+      set class-fire-pron lput (cell-value row "class-fire-pron" header-index) class-fire-pron
+      set class-type lput (cell-value row "class-type" header-index) class-type
+      set class-demand-reporters lput (cell-value row "class-demand-reporters" header-index) class-demand-reporters
+    ]
+    set i i + 1
+  ]
+end
+
+to import-patch
+  file-close
+  file-open "/home/possum/workspace/organisations/UTAD/UnidadeCurricular/Dissertacao/scripts/grass/output/DynaCLUE_input_grassgis_rstats.csv"
+
+  let header-index ""
+  let class-suit-keys map [c -> (word "class_suit_" c) ] classes
+  let fire-keys []
+  ; show fire-keys
+  let i 0
+  while [not file-at-end?] [
+    let row csv:from-row file-read-line
+
+    ; Create table which associates column header and column index
+    if i = 0 [
+      set header-index headers-index-table row
+      set fire-keys filter [key -> member? "fire" key] table:keys header-index
+      ]
+
+    if i >= 2 [ ; ignore second line
+      let x cell-value row "x" header-index
+      let y (cell-value row "y" header-index * -1)
+      ask patch x y [
+        set class cell-value row "class" header-index
+        set class cell-value row "class_future" header-index
+        set pcolor item class class-pcolor
+
+        ; use table and item procedure to fetch suitability values in row
+        set class-suit []
+        foreach classes [c ->
+          let key item c class-suit-keys; fetch column header for table search
+          ifelse (item c class-type = 1) and (table:has-key? header-index key) [
+            set class-suit lput (cell-value row key header-index) class-suit
+          ] [
+            set class-suit lput 0 class-suit
+          ]
+        ]
+        if fire-choice = "input fire data" [
+          set fires []
+          foreach fire-keys [key ->
+            let fire-value cell-value row key header-index
+            ifelse fire-value != -999 [
+              set fires lput 1 fires
+            ] [
+              set fires lput 0 fires
+            ]
+          ]
+        ]
+        set pcolor white
+      ]
+    ]
+    set i i + 1
+  ]
+end
+
+
+;;;;
+;; Utility procedures
+;;;;
+
+to-report headers-index-table [row]
+  ; Create a table that associates column headers to column index
+  let table table:make
+  let columns range length row
+  foreach columns [column ->
+    table:put table item column row column
+  ]
+  report table
+end
+
+to-report cell-value [row header index-table]
+  ; Report cell value of row given header
+  let index table:get index-table header
+  let value item index row
+  report value
+end
+
+
+to randomize-class-data
+  ask patches [
+    let n length classes
+    set class-suit n-values n [precision random-float 1 4]
+    set class-suit mask-list class-suit class-type
+    ;set class-suit map [c -> item c class-suit * item c class-type] classes; + 0.1
+  ]
+
+    ; randomize at landscape patch level
+  while [any? patches with [class = 0]] [
+    ask one-of patches [
+      let random-class one-of remove-item 0 remove-item burnt-area-class classes
+      let radius random 10
+      let area random (count patches in-radius radius) / 2
+      ask n-of area patches in-radius radius [
+        set class random-class
+      ]
+    ]
+  ]
+end
+
+to-report mask-list [l mask-l]
+  report map [c -> item c l * item c mask-l] range length l
+end
+
+;;; these next procedures need to be placed in corresponding sections
+
 to-report count-class [c]
   ; patch context
   ; c : integer
   ;     land use class
-  report count patches with [class = c]
+  report count study-area with [class = c]
 end
 
 to-report calculate-class-total
@@ -185,85 +321,118 @@ to setup-class-plot
   ]
 end
 
+to test
+  clear-all
+end
 
 ;;;;;;;;;
 ;;  Allocation procedures
 ;;;;
 
 to class-allocation
+  ; there is something that needs to be fixed here
+  set class-demand map report-class-demand classes
+
+  let n length classes
+  set class-total-iter calculate-class-total ;do we need this calculation here?
+  let class-allocated-iter n-values n [0.0]
+
+  set class-comp-adv n-values n [0.0]
+  ;set class-comp-adv map comp-adv-nd classes
+
   setup-allocation-plots
   set iter 0
-  set class-comp-adv-step n-values length classes [0.0]
-  set class-total-iter calculate-class-total
-  ; ignore natural classes in class demand calculation
-  let class-demand-iter mask class-total-iter class-type
 
-  while [class-demand-iter != class-demand] [
-    set class-comp-adv map comp-adv classes
-    ask patches [
-      set-class-prob
-      let classes-allowed filter [c -> item c patch-conversion = 1] classes
-      let class-prob-allowed map [c -> item c class-prob] classes-allowed
+  ; ignore natural classes in class demand calculation
+
+  ask study-area [
+    set class-iter class
+    ;set class-allowed filter [c -> item c patch-conversion = 1] classes
+    set class-allowed item class class-conversion-allowed
+  ]
+
+;  show class-demand
+;  show class-total-iter
+;  show class-demand-reporters
+
+  while [class-allocated-iter != class-demand] [
+    set class-comp-adv map adjust-comp-adv classes
+    ask study-area [
+      set class-prob report-class-prob
+      let class-prob-allowed map [c -> item c class-prob] class-allowed
       let best-class-prob max class-prob-allowed
-      let best-class item (position best-class-prob class-prob-allowed) classes-allowed
+      let best-class item (position best-class-prob class-prob-allowed) class-allowed
       set class-iter best-class
       style-patch
     ]
 
-    set class-total-iter map [c -> count patches with [class-iter = c]] classes
-    set class-demand-iter mask class-total-iter class-type
+    set class-total-iter map [c -> count study-area with [class-iter = c]] classes
+    set class-allocated-iter mask-list class-total-iter class-type
 
     ; switch to stop allocation procedure
     if stop-allocation [
       set stop-allocation false
       stop]
     if iter > iter-slider [
+      class-allocation-cleanup
       stop
     ]
-    set iter iter + 1
     if update-allocation-plots-switch [
       update-allocation-plots
     ]
+    set iter iter + 1
   ]
+  class-allocation-cleanup
 end
 
 to class-allocation-cleanup
-  ask patches [
-    if (class-iter = 3) and (item class class-type = 1)[
+  ask study-area with [(item class-iter class-type != 1) and (item class class-type = 1)] [ ; FIXME need to set the correct class
       set age 0
     ]
+  ask study-area [
     set class class-iter
     style-patch
   ]
-  set-current-plot "land-total-iter"
+  set-current-plot "class-total-iter"
   clear-plot
-  set-current-plot "comp-adv"
+  set-current-plot "class-comp-adv"
   clear-plot
 end
 
-to-report comp-adv [c]
+to-report comp-adv-nd [c]
+  ; normalized difference of demand and total area in iteration
   ; patch context
   ; c : integer
   ;     land use class
-  if item c class-type = 0 [
+  ifelse item c class-type != 1 [
     report 0.0
+  ] [
+    let c-total-iter item c class-total-iter
+    let c-demand item c class-demand
+    ifelse (c-total-iter = 0) and (c-demand = 0) [report 0.0] [
+      ;report ((c-demand - c-total-iter) / c-demand * 100) ; percentage difference
+      report (c-demand - c-total-iter) / (c-demand + c-total-iter)
+    ]
   ]
-  let c-total-iter item c class-total-iter
-  let c-demand item c class-demand
-  let c-comp-adv item c class-comp-adv
-  let class-perc-diff (c-total-iter - c-demand) / c-demand * 100
-  ; INFO tweaks comp-adv-step according to percentage difference between class total and demanad
-  let comp-adv-step abs class-perc-diff * 0.0001 ; TODO turn optimization base step into parameter?
-  set class-comp-adv-step replace-item c class-comp-adv-step comp-adv-step
-  ; TODO if previous to steps are of equal change increase parameter
-  if c-total-iter < c-demand [report c-comp-adv + comp-adv-step]
-  if c-total-iter > c-demand [report c-comp-adv - comp-adv-step]
-  if c-total-iter = c-demand [report c-comp-adv]
 end
 
-to set-class-prob
+to-report adjust-comp-adv [c]
   ; patch context
-  set class-prob map [c ->
+  ; c : integer
+  ;     land use class
+  let c-comp-adv item c class-comp-adv
+  let c-comp-adv-step (comp-adv-nd c) * comp-adv-step-size
+;  let c-comp-adv-step 0
+;  if (comp-adv-nd c) > 0 [set c-comp-adv-step comp-adv-step-size]
+;  if (comp-adv-nd c) < 0 [set c-comp-adv-step (- comp-adv-step-size)]
+;  if (comp-adv-nd c) = 0 [set c-comp-adv-step 0]
+  report c-comp-adv + c-comp-adv-step ; TODO turn optimization base step into parameter?
+end
+
+to-report report-class-prob
+  ; TODO optimize calculations by using matrices extension
+  ; patch context
+ report map [c ->
       item c class-suit
       + item c class-comp-adv
       + report-patch-elasticity c
@@ -282,19 +451,19 @@ to-report report-patch-elasticity [c]
 end
 
 to setup-allocation-plots
-  set-current-plot "land-total-iter"
+  set-current-plot "class-total-iter"
   setup-class-plot
-  set-current-plot "comp-adv"
+  set-current-plot "class-comp-adv"
   setup-class-plot
 end
 
 to update-allocation-plots
-  set-current-plot "land-total-iter"
+  set-current-plot "class-total-iter"
   foreach classes [ c ->
     set-current-plot-pen (word item c class-labels)
     plot item c class-total-iter
   ]
-  set-current-plot "comp-adv"
+  set-current-plot "class-comp-adv"
   foreach classes [ c ->
     set-current-plot-pen (word item c class-labels)
     plot item c class-comp-adv
@@ -302,19 +471,21 @@ to update-allocation-plots
 end
 
 ;;;;
-;; Utility procedures
+;; Demand procedures
 ;;;;
 
-to randomize-class-suit
-  ; patch context
-  let n length classes
-  set class-suit n-values n [precision random-float 1 4]
-  set class-suit mask class-suit class-type
-  set class-suit replace-item 3 class-suit 0.1
+to-report report-class-demand [c]
+  let reporter item c class-demand-reporters
+  ifelse item c class-type = 1[
+    report runresult reporter
+  ] [
+   report 0
+  ]
 end
 
-to-report mask [l mask-l]
-  report map [c -> item c l * item c mask-l] range length l
+to-report perc-increase [c perc]
+  ; increase demand by given percentage
+  report round (item c class-total + (item c class-total * perc))
 end
 
 ;;;;
@@ -323,7 +494,7 @@ end
 
 
 to fire-ignite
-  ask one-of patches with [patch-fire-pron > 0]
+  ask one-of study-area with [patch-fire-pron > 0]
   [
     set class burnt-area-class
     set age 0
@@ -349,8 +520,20 @@ to fire-spread
           set new-fire-front (patch-set new-fire-front self) ;; extend the next round front
         ]
       ]
+      ask fire-front [set pcolor item burnt-area-class class-pcolor]
       set fire-front new-fire-front
     ]
+  ]
+end
+
+to fire-deterministic
+  ; need to make fire tick limit loaded
+  ifelse ticks < 7 [
+    ask study-area with [item ticks fires = 1] [
+      set class burnt-area-class
+    ]
+  ] [
+    stop
   ]
 end
 
@@ -359,7 +542,7 @@ end
 ;;;;
 
 to succession
-  ask patches [
+  ask study-area [
     let succession-class item 0 item class class-succession
     let succession-age item 1 item class class-succession
 
@@ -380,15 +563,14 @@ end
 
 to style-patch
   ; patch context
-  ifelse is-string? style-pcolor-choice [
-    if style-pcolor-choice = "class-optimal" [
-      set-class-pcolor class-optimal]
-    if style-pcolor-choice = "class" [
-      set-class-pcolor class]
-    if style-pcolor-choice = "class-iter" [
-      set-class-pcolor class-iter]
-  ] [
-    set-class-suit-pcolor style-pcolor-choice
+  if style-pcolor-choice = "class-optimal" [
+    set-class-pcolor class-optimal]
+  if style-pcolor-choice = "class" [
+    set-class-pcolor class]
+  if style-pcolor-choice = "class-iter" [
+    set-class-pcolor class-iter]
+  if style-pcolor-choice = "class-suit" [
+    set-class-suit-pcolor class-suit-choice
   ]
   style-plabel
 end
@@ -419,13 +601,13 @@ to set-class-suit-pcolor [c]
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
-226
-22
-769
-566
+270
+30
+953
+632
 -1
 -1
-10.5
+1.671
 1
 10
 1
@@ -436,9 +618,9 @@ GRAPHICS-WINDOW
 0
 1
 0
-50
+403
+-354
 0
-50
 0
 0
 1
@@ -446,10 +628,10 @@ ticks
 30.0
 
 BUTTON
-15
-65
-95
-98
+10
+115
+75
+148
 NIL
 go
 T
@@ -462,28 +644,11 @@ NIL
 NIL
 1
 
-BUTTON
-15
-20
-95
-55
-NIL
-setup
-NIL
-1
-T
-OBSERVER
-NIL
-NIL
-NIL
-NIL
-1
-
 PLOT
-800
-30
-1495
-265
+1150
+10
+2015
+250
 class-total
 NIL
 NIL
@@ -497,10 +662,10 @@ true
 PENS
 
 SWITCH
-15
-150
-190
-183
+10
+435
+205
+468
 plabel-switch
 plabel-switch
 1
@@ -508,12 +673,12 @@ plabel-switch
 -1000
 
 BUTTON
-110
-65
-190
-98
+150
+115
+230
+148
 style-patch
-ask patches [style-patch]
+ask patches with [class != 0] [style-patch]
 NIL
 1
 T
@@ -525,54 +690,21 @@ NIL
 1
 
 CHOOSER
-15
-190
-190
-235
+10
+325
+205
+370
 style-pcolor-choice
 style-pcolor-choice
-"class" "class-optimal" "class-iter" 0 1 2
-0
-
-MONITOR
-1505
-140
-1705
-185
-NIL
-class-demand
-17
-1
-11
-
-MONITOR
-1505
-305
-1705
-350
-NIL
-sum class-demand
-17
-1
-11
-
-MONITOR
-1505
-84
-1705
-129
-NIL
-class-total
-17
-1
-11
+"class" "class-optimal" "class-iter" "class-suit"
+2
 
 PLOT
-800
-270
-1145
-545
-land-total-iter
+1150
+260
+2015
+520
+class-total-iter
 NIL
 NIL
 0.0
@@ -585,10 +717,10 @@ true
 PENS
 
 BUTTON
-110
-20
-190
-55
+80
+115
+145
+148
 go once
 go
 NIL
@@ -602,21 +734,10 @@ NIL
 1
 
 MONITOR
-1505
-195
-1705
-240
-NIL
-class-total-iter
-17
-1
-11
-
-MONITOR
-800
-555
-857
-600
+10
+640
+67
+685
 NIL
 iter
 17
@@ -625,10 +746,10 @@ iter
 
 PLOT
 1150
-270
-1495
-545
-comp-adv
+530
+2015
+1085
+class-comp-adv
 NIL
 NIL
 0.0
@@ -641,43 +762,21 @@ true
 PENS
 
 SWITCH
-15
-105
-190
-138
+10
+525
+185
+558
 stop-allocation
 stop-allocation
 1
 1
 -1000
 
-MONITOR
-1505
-250
-1705
-295
-NIL
-class-comp-adv-step
-4
-1
-11
-
-MONITOR
-1505
-30
-1705
-75
-NIL
-class-demand-perc
-17
-1
-11
-
 SWITCH
-15
-250
-210
-283
+10
+155
+205
+188
 class-allocation-switch
 class-allocation-switch
 0
@@ -685,87 +784,170 @@ class-allocation-switch
 -1000
 
 SWITCH
-25
-310
-212
-343
+10
+195
+205
+228
 succession-switch
 succession-switch
-0
 1
--1000
-
-SWITCH
-30
-355
-157
-388
-fire-switch
-fire-switch
-0
 1
 -1000
 
 SLIDER
-40
-425
-212
-458
+10
+285
+205
+318
 ignitions
 ignitions
 0
 20
-20.0
+13.0
 1
 1
 NIL
 HORIZONTAL
 
 CHOOSER
-30
-560
-172
-605
+10
+475
+152
+520
 functional-group
 functional-group
 "grassland" "shrubland" "woodland"
 0
 
 CHOOSER
-30
-510
-172
-555
+10
+380
+205
+425
 class-suit-choice
 class-suit-choice
-0 1 2 3 4 5 6 7
-0
+0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44
+2
 
 SWITCH
-875
+10
 565
-1147
+260
 598
 update-allocation-plots-switch
 update-allocation-plots-switch
-1
+0
 1
 -1000
 
 SLIDER
-1180
-560
-1352
-593
+10
+605
+182
+638
 iter-slider
 iter-slider
 0
-1000
-500.0
+10000
+3200.0
 100
 1
 NIL
 HORIZONTAL
+
+BUTTON
+80
+75
+145
+108
+NIL
+reset
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+BUTTON
+150
+75
+213
+108
+NIL
+test
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+INPUTBOX
+10
+10
+105
+70
+input-world-width
+403.0
+1
+0
+Number
+
+INPUTBOX
+110
+10
+210
+70
+input-world-height
+355.0
+1
+0
+Number
+
+CHOOSER
+10
+235
+205
+280
+fire-choice
+fire-choice
+"no fire" "input fire data" "random fire"
+0
+
+BUTTON
+10
+75
+75
+108
+NIL
+setup\n
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+INPUTBOX
+80
+645
+237
+705
+comp-adv-step-size
+0.01
+1
+0
+Number
 
 @#$#@#$#@
 ## WHAT IS IT?
