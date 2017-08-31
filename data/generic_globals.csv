@@ -1,0 +1,8 @@
+"classes","class-code","class-labels","class-type","class-demand-reporters","class-elasticity","class-conversion","class-succession","class-fire-pron","class-pcolor"
+0,999,"NODATA",0,0,0,"[0 0 0 0 0 0 0]","[-1 -1]",0,"[255 255 255]"
+1,1,"urban",1,"perc-increase c 0",0,"[0 1 1 0 1 0 0] ","[-1 -1]",0,"[255 0 0]"
+2,2,"agriculture",1,"perc-increase c 0",0,"[0 1 1 0 1 0 0] ","[-1 -1]","0.05","[255 255 0]"
+3,31,"forest",0,0,0,"[0 1 1 1 0 0 0]","[-1 -1]","0.15","[0 102 0]"
+4,32,"shrubland",0,0,0,"[0 1 1 0 1 0 0]","[3 10]","0.25","[0 255 0]"
+5,334,"burnt area",0,0,0,"[0 1 1 0 0 1 0]","[4 1]",0,"[0 0 0]"
+6,5,"water",0,0,0,"[0 0 0 0 0 0 1]","[-1 -1]",0,"[20 0 255]"
