@@ -117,7 +117,7 @@ end
 
 to setup-perm-globals
   set world-size input-world-width * input-world-height
-  set-patch-size 0.4
+  set-patch-size 2
   resize-world 0 input-world-width (1 - input-world-height) 0
   import-globals
   set class-conversion-allowed map [c -> filter [cv -> item cv c = 1] classes ] class-conversion
@@ -159,8 +159,7 @@ end
 
 to import-globals
   file-close
-  file-open "sabor_classes_short.csv"
-  ;file-open "test_classes.csv"
+  file-open globals-data-file
 
   set classes []
   set class-pcolor []
@@ -201,7 +200,7 @@ end
 
 to import-patch
   file-close
-  file-open "/home/possum/workspace/organisations/UTAD/UnidadeCurricular/Dissertacao/scripts/grass/output/DynaCLUE_input_grassgis_rstats.csv"
+  file-open patches-data-file
 
   let header-index ""
   let class-suit-keys map [c -> (word "class_suit_" c) ] classes
@@ -603,11 +602,11 @@ end
 GRAPHICS-WINDOW
 270
 30
-953
-632
+682
+394
 -1
 -1
-1.671
+1.0
 1
 10
 1
@@ -629,9 +628,9 @@ ticks
 
 BUTTON
 10
-115
+250
 75
-148
+283
 NIL
 go
 T
@@ -663,9 +662,9 @@ PENS
 
 SWITCH
 10
-435
+570
 205
-468
+603
 plabel-switch
 plabel-switch
 1
@@ -674,9 +673,9 @@ plabel-switch
 
 BUTTON
 150
-115
+250
 230
-148
+283
 style-patch
 ask patches with [class != 0] [style-patch]
 NIL
@@ -691,13 +690,13 @@ NIL
 
 CHOOSER
 10
-325
+460
 205
-370
+505
 style-pcolor-choice
 style-pcolor-choice
 "class" "class-optimal" "class-iter" "class-suit"
-2
+0
 
 PLOT
 1150
@@ -718,9 +717,9 @@ PENS
 
 BUTTON
 80
-115
+250
 145
-148
+283
 go once
 go
 NIL
@@ -735,9 +734,9 @@ NIL
 
 MONITOR
 10
-640
+775
 67
-685
+820
 NIL
 iter
 17
@@ -763,9 +762,9 @@ PENS
 
 SWITCH
 10
-525
+660
 185
-558
+693
 stop-allocation
 stop-allocation
 1
@@ -774,9 +773,9 @@ stop-allocation
 
 SWITCH
 10
-155
+290
 205
-188
+323
 class-allocation-switch
 class-allocation-switch
 0
@@ -785,9 +784,9 @@ class-allocation-switch
 
 SWITCH
 10
-195
+330
 205
-228
+363
 succession-switch
 succession-switch
 1
@@ -796,9 +795,9 @@ succession-switch
 
 SLIDER
 10
-285
+420
 205
-318
+453
 ignitions
 ignitions
 0
@@ -811,9 +810,9 @@ HORIZONTAL
 
 CHOOSER
 10
-475
+610
 152
-520
+655
 functional-group
 functional-group
 "grassland" "shrubland" "woodland"
@@ -821,9 +820,9 @@ functional-group
 
 CHOOSER
 10
-380
+515
 205
-425
+560
 class-suit-choice
 class-suit-choice
 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44
@@ -831,9 +830,9 @@ class-suit-choice
 
 SWITCH
 10
-565
+700
 260
-598
+733
 update-allocation-plots-switch
 update-allocation-plots-switch
 0
@@ -842,9 +841,9 @@ update-allocation-plots-switch
 
 SLIDER
 10
-605
+740
 182
-638
+773
 iter-slider
 iter-slider
 0
@@ -857,9 +856,9 @@ HORIZONTAL
 
 BUTTON
 80
-75
+210
 145
-108
+243
 NIL
 reset
 NIL
@@ -874,9 +873,9 @@ NIL
 
 BUTTON
 150
-75
+210
 213
-108
+243
 NIL
 test
 NIL
@@ -891,9 +890,9 @@ NIL
 
 INPUTBOX
 10
-10
+145
 105
-70
+205
 input-world-width
 403.0
 1
@@ -902,9 +901,9 @@ Number
 
 INPUTBOX
 110
-10
+145
 210
-70
+205
 input-world-height
 355.0
 1
@@ -913,9 +912,9 @@ Number
 
 CHOOSER
 10
-235
+370
 205
-280
+415
 fire-choice
 fire-choice
 "no fire" "input fire data" "random fire"
@@ -923,9 +922,9 @@ fire-choice
 
 BUTTON
 10
+210
 75
-75
-108
+243
 NIL
 setup\n
 NIL
@@ -940,14 +939,36 @@ NIL
 
 INPUTBOX
 80
-645
+780
 237
-705
+840
 comp-adv-step-size
 0.01
 1
 0
 Number
+
+INPUTBOX
+10
+10
+250
+70
+globals-data-file
+../data/sabor_globals.csv
+1
+0
+String
+
+INPUTBOX
+10
+75
+250
+135
+patches-data-file
+../data/sabor_patches.csv
+1
+0
+String
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -956,12 +977,21 @@ Number
 
 ## HOW IT WORKS
 
-(what rules the agents use to create the overall behavior of the model)
+This is a land use model based on the Dyna CLUE framework (Verburg & Overmas, 2009). The model determines land use based on the following top-down and bottom-up modules:
+1. Land use allocation module
+2. Natural succession module
+3. Fire module
+
+### Land use module
+(to be edited)
+### Natural sucession module
+(to be 
+(to be edited)
 
 ## HOW TO USE IT
 
-(how to use the model, including a description of each of the items in the Interface tab)
-
+Each land use / land cover class is associated with a sequential number
+In the **globals-data-file** and **patches-data-file** input dialogs enter the corresponding globals and data files. These must me set [](file:data/sabor_globals.csv) and ()
 ## THINGS TO NOTICE
 
 (suggested things for the user to notice while running the model)
@@ -984,7 +1014,7 @@ Number
 
 ## CREDITS AND REFERENCES
 
-(a reference to the model's URL on the web if it has one, as well as any other necessary credits, citations, and links)
+Verburg, Peter H. & Overmars, Koen P. 2009. Combining top-down and bottom-up dynamics in land use modeling: exploring the future of abandoned farmlands in Europe with the Dyna-CLUE model. Landscape Ecology 24:1167–1181. DOI 10.1007/s10980-009-9355-7
 @#$#@#$#@
 default
 true
